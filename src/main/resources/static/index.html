@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Customer Feedback Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --panel-2: #273449;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #38bdf8;
+            --pos: #22c55e;
+            --neg: #ef4444;
+            --neu: #94a3b8;
+            --warn: #f59e0b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        header {
+            padding: 18px 28px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: baseline;
+            gap: 18px;
+        }
+        header h1 { margin: 0; font-size: 20px; }
+        header .sub { color: var(--muted); font-size: 13px; }
+        .kpis {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            padding: 18px 28px;
+        }
+        .kpi {
+            background: var(--panel);
+            border-radius: 8px;
+            padding: 14px 16px;
+            border: 1px solid #334155;
+        }
+        .kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+        .kpi .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+        .kpi .value.neg { color: var(--neg); }
+        .kpi .value.warn { color: var(--warn); }
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+            padding: 0 28px 28px;
+        }
+        .grid-full { grid-column: 1 / -1; }
+        .card {
+            background: var(--panel);
+            border-radius: 8px;
+            padding: 16px 18px;
+            border: 1px solid #334155;
+        }
+        .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+        canvas { max-height: 320px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #334155; vertical-align: top; }
+        th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .pill.Positive { background: rgba(34,197,94,.15); color: var(--pos); }
+        .pill.Negative { background: rgba(239,68,68,.15); color: var(--neg); }
+        .pill.Neutral  { background: rgba(148,163,184,.18); color: var(--neu); }
+        .filters { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+        select {
+            background: var(--panel-2);
+            color: var(--text);
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+        }
+        .heatmap { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .heatmap th, .heatmap td { padding: 6px 4px; text-align: center; border: 1px solid #334155; }
+        .heatmap td.svc { text-align: left; color: var(--muted); white-space: nowrap; }
+        .insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+        .insight {
+            background: var(--panel-2);
+            border-left: 3px solid var(--accent);
+            border-radius: 6px;
+            padding: 12px 14px;
+        }
+        .insight.pain { border-left-color: var(--neg); }
+        .insight.action { border-left-color: var(--warn); }
+        .insight .cat { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
+        .insight .headline { font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; }
+        .insight .detail { color: var(--muted); font-size: 12px; margin-bottom: 8px; line-height: 1.4; }
+        .insight .action-row { font-size: 12px; color: #e2e8f0; line-height: 1.4; }
+        .insight .action-row b { color: var(--accent); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Customer Feedback Dashboard</h1>
+    <span class="sub" id="dataRange"></span>
+</header>
+
+<section class="kpis" id="kpis"></section>
+
+<section class="grid">
+    <div class="card grid-full">
+        <h2>Management summary &mdash; key patterns, pain points, recommended actions</h2>
+        <div class="insights" id="insightsWrap"></div>
+    </div>
+
+    <div class="card grid-full">
+        <h2>Feedback volume over time (spikes marked)</h2>
+        <canvas id="volumeChart"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Volume by service (stacked by sentiment)</h2>
+        <canvas id="serviceChart"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Themes across all feedback</h2>
+        <canvas id="themeChart"></canvas>
+    </div>
+
+    <div class="card grid-full">
+        <h2>Themes &times; service (negative-leaning themes only)</h2>
+        <div id="heatmapWrap"></div>
+    </div>
+
+    <div class="card grid-full">
+        <h2>Recent feedback</h2>
+        <div class="filters">
+            <select id="sentimentFilter">
+                <option value="">All sentiments</option>
+                <option value="Negative">Negative</option>
+                <option value="Positive">Positive</option>
+                <option value="Neutral">Neutral</option>
+            </select>
+            <select id="serviceFilter"><option value="">All services</option></select>
+        </div>
+        <table>
+            <thead><tr><th>Date</th><th>Service</th><th>Sentiment</th><th>Themes</th><th>Feedback</th></tr></thead>
+            <tbody id="feedbackBody"></tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+const fmtPct = n => (n * 100).toFixed(1) + '%';
+const fmtNum = n => n.toLocaleString();
+
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+function kpiCard(label, value, cls = '') {
+    return `<div class="kpi"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+}
+
+async function loadKpis() {
+    const s = await j('/api/summary');
+    const negRate = s.totalFeedback ? s.totalNegative / s.totalFeedback : 0;
+    document.getElementById('kpis').innerHTML = [
+        kpiCard('Total feedback', fmtNum(s.totalFeedback)),
+        kpiCard('Positive', fmtNum(s.totalPositive), 'value'),
+        kpiCard('Negative', fmtNum(s.totalNegative) + ' (' + fmtPct(negRate) + ')', 'neg'),
+        kpiCard('Top theme', s.topTheme || '—'),
+        kpiCard('Worst service', (s.worstService || '—') + ' (' + fmtPct(s.worstServiceNegativeRate) + ')', 'warn'),
+        kpiCard('Spike days', fmtNum(s.spikeDays), 'warn'),
+    ].join('');
+}
+
+async function loadVolume() {
+    const data = await j('/api/volume-over-time');
+    if (data.length) {
+        document.getElementById('dataRange').textContent =
+            data[0].date + ' → ' + data[data.length - 1].date;
+    }
+    const labels = data.map(d => d.date);
+    const counts = data.map(d => d.count);
+    const spikeBg = data.map(d => d.spike ? 'rgba(245,158,11,0.9)' : 'rgba(56,189,248,0.7)');
+
+    new Chart(document.getElementById('volumeChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Feedback per day', data: counts, backgroundColor: spikeBg, borderRadius: 2 }] },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 14 }, grid: { color: '#334155' } },
+                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+            }
+        }
+    });
+}
+
+async function loadByService() {
+    const data = await j('/api/by-service');
+    const labels = data.map(d => d.service);
+    new Chart(document.getElementById('serviceChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Positive', data: data.map(d => d.positive), backgroundColor: '#22c55e' },
+                { label: 'Neutral',  data: data.map(d => d.neutral),  backgroundColor: '#94a3b8' },
+                { label: 'Negative', data: data.map(d => d.negative), backgroundColor: '#ef4444' },
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            plugins: { legend: { labels: { color: '#e2e8f0' } } },
+            scales: {
+                x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+            }
+        }
+    });
+
+    const sel = document.getElementById('serviceFilter');
+    labels.forEach(s => {
+        const o = document.createElement('option');
+        o.value = s; o.textContent = s;
+        sel.appendChild(o);
+    });
+}
+
+async function loadThemes() {
+    const data = await j('/api/themes');
+    new Chart(document.getElementById('themeChart'), {
+        type: 'bar',
+        data: { labels: data.map(d => d.theme), datasets: [{ data: data.map(d => d.count), backgroundColor: '#38bdf8' }] },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+            }
+        }
+    });
+}
+
+async function loadHeatmap() {
+    const data = await j('/api/themes-by-service');
+    const negativeThemes = ['support_delay', 'outage', 'usability', 'reporting', 'onboarding', 'performance', 'pricing'];
+    const services = [...new Set(data.map(d => d.service))].sort();
+    const cells = {};
+    let max = 0;
+    data.forEach(d => {
+        if (!negativeThemes.includes(d.theme)) return;
+        cells[d.service + '|' + d.theme] = d.count;
+        if (d.count > max) max = d.count;
+    });
+
+    const colorFor = v => {
+        if (!v) return '#1e293b';
+        const intensity = Math.min(1, v / max);
+        const r = Math.round(239 * intensity + 30 * (1 - intensity));
+        const g = Math.round(68  * intensity + 41 * (1 - intensity));
+        const b = Math.round(68  * intensity + 59 * (1 - intensity));
+        return `rgb(${r},${g},${b})`;
+    };
+
+    let html = '<table class="heatmap"><thead><tr><th></th>';
+    negativeThemes.forEach(t => html += `<th>${t}</th>`);
+    html += '</tr></thead><tbody>';
+    services.forEach(svc => {
+        html += `<tr><td class="svc">${svc}</td>`;
+        negativeThemes.forEach(t => {
+            const v = cells[svc + '|' + t] || 0;
+            html += `<td style="background:${colorFor(v)};color:${v > max*0.4 ? '#fff' : '#cbd5e1'}">${v || ''}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('heatmapWrap').innerHTML = html;
+}
+
+async function loadRecent() {
+    const sentiment = document.getElementById('sentimentFilter').value;
+    const service = document.getElementById('serviceFilter').value;
+    const params = new URLSearchParams();
+    if (sentiment) params.set('sentiment', sentiment);
+    if (service) params.set('service', service);
+    params.set('limit', '25');
+    const data = await j('/api/recent?' + params.toString());
+    const tbody = document.getElementById('feedbackBody');
+    tbody.innerHTML = data.map(d => `
+        <tr>
+            <td>${d.timestamp.replace('T', ' ').slice(0, 16)}</td>
+            <td>${d.service}</td>
+            <td><span class="pill ${d.sentiment}">${d.sentiment}</span></td>
+            <td style="color:#94a3b8;font-size:11px">${d.themes || '—'}</td>
+            <td>${d.text}</td>
+        </tr>
+    `).join('');
+}
+
+document.getElementById('sentimentFilter').addEventListener('change', loadRecent);
+document.getElementById('serviceFilter').addEventListener('change', loadRecent);
+
+async function loadInsights() {
+    const data = await j('/api/insights');
+    const cls = c => c === 'Main pain point' ? 'pain' : c === 'Recommended action' ? 'action' : '';
+    document.getElementById('insightsWrap').innerHTML = data.map(i => `
+        <div class="insight ${cls(i.category)}">
+            <div class="cat">${i.category}</div>
+            <div class="headline">${i.headline}</div>
+            <div class="detail">${i.detail}</div>
+            <div class="action-row"><b>Action:</b> ${i.action}</div>
+        </div>
+    `).join('');
+}
+
+(async () => {
+    await loadKpis();
+    await loadInsights();
+    await loadVolume();
+    await loadByService();
+    await loadThemes();
+    await loadHeatmap();
+    await loadRecent();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: feedback-dashboard
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/summary
+    envVars:
+      - key: JAVA_OPTS
+        value: "-Xmx400m"

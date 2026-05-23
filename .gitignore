@@ -1,0 +1,10 @@
+target/
+.idea/
+.vscode/
+*.iml
+app.log
+HELP.md
+
+# Assignment brief + original dataset at repo root (duplicate of src/main/resources/data/)
+Customer Feedback Dashboard.docx
+customer_feedback_dataset_with_timestamps.xlsx
